@@ -132,11 +132,11 @@
     // click on "Upload PDF file" button
     document.getElementById("upload_file").addEventListener('change', function (e) {
         document.getElementById('confirm').value = "";
-        document.getElementById('cancel').classList.remove("hidden");
         this.style.display = 'none';
 
         file = e.target.files[0];
         if (file.type == "application/pdf") {
+            document.getElementById('cancel').classList.remove("hidden");
             var fileReader = new FileReader();
 
             fileReader.onload = function () {
@@ -146,6 +146,7 @@
             fileReader.readAsArrayBuffer(file);
         } else {
             alert("Error! Please, check the uploading file.");
+            document.getElementById('upload_file').value = "";
         }
     });
 
