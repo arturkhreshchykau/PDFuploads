@@ -1,0 +1,10 @@
+﻿@model PDFupload.Models.TextFileFormat
+@{
+    ViewBag.Title = "Checkout";
+}
+
+<h2>Text version of the PDF file</h2>
+<br />
+<div>
+    <textarea class="display_text" rows="100" cols="300" readonly>"@Model.PDFtext"</textarea>
+</div>

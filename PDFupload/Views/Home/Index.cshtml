@@ -1,0 +1,234 @@
+﻿@model  IEnumerable<PDFupload.Models.UploadFile>
+
+<br />
+<div class="container" style="padding:30px;">
+    <div class="grp_buttons">
+        <label for="upload_file" class="upload_button">
+            <i class="fa fa-cloud-upload"></i>Upload PDF file
+        </label>
+        <input type="file" id="upload_file" class="hidden" />
+        <button id="cancel" class="btn btn-default hidden">Cancel</button>
+        <button id="confirm" class="btn btn-success pull-right hidden">Confirm</button>
+    </div>
+    <div class="data_row">
+        <div class="col-sm-4 table_div">
+            @if (Model.Count() > 0)
+            {
+                <table class="table table-bordered files_list">
+                    <tr>
+                        <th class="col-md-4">
+                            Previous uploads
+                        </th>
+
+                        <th class="col-md-2"></th>
+                    </tr>
+
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td>
+                                @Html.DisplayFor(model => item.FileName)
+                            </td>
+
+                            <td>
+                                @Html.ActionLink("Download", "DownLoadFile", new { id = item.Id }) / <a href="#" id="@item.Id" onclick="displayFile(this.id);">Show</a>
+                            </td>
+                        </tr>
+
+                    }
+
+                </table>
+            }
+
+        </div>
+        <div class="col-sm-8">
+            <div id="pdf_main_container">
+                <div id="pdf_loader">Loading document ...</div>
+                <div id="pdf_contents">
+                    <div id="pdf_meta">
+                        <div id="pdf_buttons">
+                            <button id="pdf_prev">Previous</button>
+                            <button id="pdf_next">Next</button>
+                        </div>
+                        <div id="page_count_container">Page <div id="pdf_current_page"></div> of <div id="pdf_total_pages"></div></div>
+                    </div>
+                    <canvas id="pdf_canvas" width="700"></canvas>
+                    <div id="page_loader">Loading page ...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var pdf_file,
+        file,
+        current_page,
+        canvas = document.getElementById('pdf_canvas');
+
+    // load and render specific page of the PDF
+    async function showPage(page_no) {
+        current_page = page_no;
+
+        // disable Previous & Next buttons while page is being loaded
+        document.getElementById("pdf_next").disabled = true;
+        document.getElementById("pdf_prev").disabled = true;
+
+        // while page is being rendered hide the canvas and show a loading message
+        document.getElementById("pdf_canvas").style.display = 'none';
+        document.getElementById("page_loader").style.display = 'block';
+
+        // update current page
+        document.getElementById("pdf_current_page").innerHTML = current_page;
+
+        // get handle of page
+        try {
+            var page = await pdf_file.getPage(current_page);
+        }
+        catch (error) {
+            alert(error.message);
+        }
+
+        // original width of the pdf page at scale 1
+        var pdf_original_width = page.getViewport(1).width;
+
+        // as the canvas is of a fixed width we need to adjust the scale of the viewport where page is rendered
+        var scale_required = canvas.width / pdf_original_width;
+
+        // get viewport to render the page at required scale
+        var viewport = page.getViewport(scale_required);
+
+        // set canvas height same as viewport height
+        canvas.height = viewport.height;
+
+        // setting page loader height for smooth experience
+        document.getElementById("page_loader").style.height = canvas.height + 'px';
+        document.getElementById("page_loader").style.lineHeight = canvas.height + 'px';
+
+        // page is rendered on <canvas> element
+        var render_context = {
+            canvasContext: canvas.getContext('2d'),
+            viewport: viewport
+        };
+
+        // render the page contents in the canvas
+        try {
+            await page.render(render_context);
+        }
+        catch (error) {
+            alert(error.message);
+        }
+
+        // re-enable Previous & Next buttons
+        document.getElementById("pdf_next").disabled = false;
+        document.getElementById("pdf_prev").disabled = false;
+
+        // show the canvas and hide the page loader
+        document.getElementById("pdf_canvas").style.display = 'block';
+        document.getElementById("page_loader").style.display = 'none';
+        document.getElementById("confirm").classList.remove("hidden");
+    }
+
+    // click on "Upload PDF file" button
+    document.getElementById("upload_file").addEventListener('change', function (e) {
+        document.getElementById('confirm').value = "";
+        document.getElementById('cancel').classList.remove("hidden");
+        this.style.display = 'none';
+
+        file = e.target.files[0];
+        if (file.type == "application/pdf") {
+            var fileReader = new FileReader();
+
+            fileReader.onload = function () {
+                var typedarray = new Uint8Array(this.result);
+                convertToPDF(typedarray);
+            };
+            fileReader.readAsArrayBuffer(file);
+        } else {
+            alert("Error! Please, check the uploading file.");
+        }
+    });
+
+    function convertToPDF(typedarray) {
+        pdfjsLib.getDocument(typedarray).then(function (pdf) {
+            pdf_file = pdf;
+            // Hide the pdf loader and show pdf container
+            document.getElementById("pdf_loader").style.display = 'none';
+            document.getElementById("pdf_contents").style.display = 'block';
+            document.getElementById("pdf_total_pages").innerHTML = pdf_file.numPages;
+
+            // show the first page
+            showPage(1);
+        });
+    }
+
+    // click on the "Show" link
+    function displayFile(id) {
+        document.getElementById('confirm').value = id;
+        document.getElementById('cancel').classList.remove("hidden");
+        fetch(`/Home/GetPDF/${id}`)
+            .then((response) => {
+                return response.json()
+            })
+            .then((data) => {
+                if (data.success) {
+                    convertToPDF(new Uint8Array(data.file.FileContent));
+                } else {
+                    alert("Error!");
+                }                
+            })
+            .catch(error => {
+                alert("Error getting file");
+                console.log(error);
+            });
+    }
+
+    // click on the "Previous" page button
+    document.getElementById("pdf_prev").addEventListener('click', function () {
+        if (current_page != 1)
+            showPage(--current_page);
+    });
+
+    // click on the "Next" page button
+    document.getElementById("pdf_next").addEventListener('click', function () {
+        if (current_page != pdf_file.numPages)
+            showPage(++current_page);
+    });
+
+    // click on the "Cancel" button
+    document.getElementById("cancel").addEventListener('click', function () {
+        document.getElementById("pdf_contents").style.display = 'none';
+        document.getElementById("pdf_loader").style.display = 'none';
+        document.getElementById("confirm").classList.add("hidden");
+        document.getElementById('upload_file').value = "";
+    });
+
+    // click on the "Confirm" button
+    document.getElementById("confirm").addEventListener('click', function () {
+        var id = document.getElementById('confirm').value;
+        if (!id) {
+            var formData = new FormData();
+            formData.append('file', file);
+            fetch('/Home/Index', {
+                method: 'POST',
+                body: formData
+            })
+                .then((response) => { return response.json() })
+                .then(data => {
+                    if (data.success) {
+                        location.href = `/Home/Checkout/${data.Id}`;
+                    } else {
+                        alert("Error saving file");
+                    }
+                })
+                .catch(error => {
+                    alert("Error saving file");
+                    console.log(error);
+                });
+        } else {
+            location.href = `/Home/Checkout/${id}`;
+        }
+    });
+
+    //# sourceURL=_index.js
+</script>
